@@ -65,7 +65,7 @@ TUKEY_K = 3.0     # k для "дальней" ограды Тьюки (экст�
 # детерминированы), поэтому повторный запуск даёт тот же anomalies.csv.
 
 
-# ----------------------------- Загрузка данных -------------------------------
+
 def find_data_dir(user_path):
     """Находит каталог с parquet-данными. Без хардкода конкретных файлов."""
     candidates = []
@@ -92,20 +92,20 @@ def load_data(data_dir):
     """
     files = sorted(glob.glob(os.path.join(data_dir, "**", "*.parquet"),
                              recursive=True))
-    # игнорируем служебный пример с эталонными аномалиями, если он рядом
+
     files = [f for f in files if "invalidResp" not in os.path.basename(f)]
     if not files:
         raise FileNotFoundError("Не найдены parquet-файлы в " + data_dir)
     df = pd.concat([pd.read_parquet(f) for f in files], ignore_index=True)
 
-    # Унификация имени столбца категории поставки.
+  
     if "CategoryDelivery" not in df.columns:
         if "CategoryNameDelivery" in df.columns:
             df["CategoryDelivery"] = df["CategoryNameDelivery"]
         else:
             raise KeyError("Нет столбца CategoryDelivery / CategoryNameDelivery")
 
-    # decimal -> float
+
     for c in ["Weight", "week_weight", "month_weight"]:
         if c in df.columns:
             df[c] = df[c].astype(float)
@@ -114,7 +114,7 @@ def load_data(data_dir):
     return df
 
 
-# ----------------------------- Агрегация OTS ---------------------------------
+
 def compute_daily_ots(df):
     """Считает daily_ots на уровне триггера (Subject, date, CategoryDelivery, BrandID).
 
@@ -126,11 +126,11 @@ def compute_daily_ots(df):
     mask &= cat.notna() & (cat != "")
     d1 = df.loc[mask].copy()
 
-    # Дневной вес респондента Weight(i, k).
+
     dweight = (d1.groupby(["SubjectID", "researchdate"])["Weight"]
                  .median().rename("dweight").reset_index())
 
-    # count_rows(i, j, k)
+
     cnt = (d1.groupby(["SubjectID", "researchdate",
                        "CategoryDelivery", "BrandID"])
              .size().rename("count_rows").reset_index())
@@ -138,7 +138,6 @@ def compute_daily_ots(df):
     cnt = cnt.merge(dweight, on=["SubjectID", "researchdate"], how="left")
     cnt["daily_ots"] = cnt["dweight"] * cnt["count_rows"]
 
-    # Название бренда (детерминированно, первое непустое) для диагностики.
     bname = (d1.dropna(subset=["Brand"]).groupby("BrandID")["Brand"]
                .first().rename("Brand").reset_index())
     cnt = cnt.merge(bname, on="BrandID", how="left")
@@ -146,7 +145,6 @@ def compute_daily_ots(df):
     return cnt
 
 
-# ----------------------------- Поиск аномалий --------------------------------
 def _robust_group_stats(cnt, keys, value="L"):
     """median, MAD, Q1, Q3, n по группе keys (transform -> массивы по строкам)."""
     g = cnt.groupby(keys)[value]
@@ -163,32 +161,32 @@ def detect_anomalies(cnt):
     cnt = cnt.copy()
     cnt["L"] = np.log1p(cnt["daily_ots"].to_numpy())
 
-    # Эталон уровня бренда (CategoryDelivery, BrandID) и уровня категории.
+
     bmed, bmad, bq1, bq3, bn = _robust_group_stats(
         cnt, ["CategoryDelivery", "BrandID"])
     cmed, cmad, cq1, cq3, _ = _robust_group_stats(cnt, ["CategoryDelivery"])
 
-    use_brand = bn >= N_MIN  # иерархический фолбэк для редких брендов
+    use_brand = bn >= N_MIN 
     med = np.where(use_brand, bmed, cmed)
     mad = np.where(use_brand, bmad, cmad)
     q1 = np.where(use_brand, bq1, cq1)
     q3 = np.where(use_brand, bq3, cq3)
 
-    # Защита от MAD == 0 (вырожденные распределения, напр. count_rows==1 у всех).
+
     global_mad = max(float(np.median(np.abs(cnt["L"] - cnt["L"].median()))), 1e-6)
     mad = np.where(mad <= 1e-9,
                    np.where(cmad > 1e-9, cmad, global_mad), mad)
 
     iqr = np.maximum(q3 - q1, 1e-9)
 
-    # score — робастный modified z-score в лог-пространстве.
+
     score = 0.6745 * (cnt["L"].to_numpy() - med) / mad
 
-    # threshold — "дальняя" ограда Тьюки в z-единицах, но не ниже 3.5.
+ 
     far_L = q3 + TUKEY_K * iqr
     threshold = np.maximum(0.6745 * (far_L - med) / mad, MODZ_FLOOR)
 
-    # Абсолютный пол: малый OTS не может быть аномалией.
+
     ots_floor = float(cnt["daily_ots"].median())
 
     cnt["score"] = np.round(score, 4)
@@ -218,8 +216,6 @@ def build_reasons(cnt_flagged):
     f["daily_ots"] = f["daily_ots"].round(3)
     return f
 
-
-# ----------------------------- Обязательные графики --------------------------
 def plot_total_ots_before_after(cnt, removed_pairs, path):
     """Суммарный дневной OTS до и после удаления аномалий."""
     idx = cnt.set_index(["SubjectID", "researchdate"]).index
@@ -292,7 +288,6 @@ def plot_daily_anomaly_count(reasons, path):
     fig.tight_layout(); fig.savefig(path, dpi=110); plt.close(fig)
 
 
-# ----------------------- Аналитические возможности (п. 8.2) ------------------
 def before_after_by_dimension(df, removed_pairs, dim_col, out_png=None, cnt=None):
     """OTS до/после очистки в разрезе любого признака респондента/ресурса/категории.
 
@@ -306,14 +301,14 @@ def before_after_by_dimension(df, removed_pairs, dim_col, out_png=None, cnt=None
         cnt = compute_daily_ots(df)
     key = ["SubjectID", "researchdate", "CategoryDelivery", "BrandID"]
     if dim_col in cnt.columns:
-        # признак уже на уровне триггера (CategoryDelivery, Brand) — берём как есть
+
         cnt = cnt.copy()
         cnt[dim_col] = cnt[dim_col].fillna("—")
     else:
         src = df.loc[(df["BrandinDelivery"] == 1)].copy()
         if dim_col not in src.columns:
             raise KeyError(f"Нет столбца {dim_col}")
-        # детерминированный представитель признака по триггеру (первое непустое).
+
         dim = (src.dropna(subset=[dim_col]).groupby(key)[dim_col]
                   .first().rename(dim_col).reset_index())
         cnt = cnt.merge(dim, on=key, how="left")
@@ -376,7 +371,6 @@ def brand_ots_by_day(df, removed_pairs, brand_id, category=None, out_png=None, c
     return pd.DataFrame({"ots_before": before, "ots_after": after})
 
 
-# ----------------------------- main ------------------------------------------
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--data", default=None, help="каталог с parquet (data_train)")
@@ -423,7 +417,7 @@ def main():
     plot_daily_anomaly_count(
         reasons, os.path.join(plots_dir, "daily_anomaly_count.png"))
 
-    # --- демонстрация аналитических возможностей (без переписывания функций) ---
+
     extra = os.path.join(plots_dir, "extra")
     os.makedirs(extra, exist_ok=True)
     for dim in ["Пол", "Возраст", "Регион", "Федеральный_округ",
