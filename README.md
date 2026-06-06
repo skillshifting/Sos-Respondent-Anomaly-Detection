@@ -1,10 +1,10 @@
-# Поиск аномальных респондентов в активности SoS (Полусем №4)
+# Поиск аномальных респондентов в активности SoS (ПК №4)
 
 ## Запуск
 
 ```bash
 pip install -r requirements.txt
-python solution_Дронов_ШАД-111.py
+python solution_Dronov_SHAD-111.py
 ```
 
 
@@ -12,7 +12,7 @@ python solution_Дронов_ШАД-111.py
 Можно указать путь явно:
 
 ```bash
-python solution_Дронов_ШАД-111.py --data path/to/data_train --out output
+python solution_Dronov_SHAD-111.py --data path/to/data_train --out output
 ```
 
 После запуска создаётся папка `output/`:
