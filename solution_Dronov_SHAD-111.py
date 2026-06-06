@@ -2,8 +2,8 @@
 Полусеместровый контроль №4 — Поиск аномальных респондентов в активности SoS.
 
 Запуск:
-    python solution_FIO_GROUP.py
-    python solution_FIO_GROUP.py --data path/to/data_train --out output
+    python solution_Dronov_SHAD-111.py
+    python solution_Dronov_SHAD-111.py --data path/to/data_train --out output
 
 После запуска создаётся папка output/ с обязательными файлами:
     output/anomalies.csv
